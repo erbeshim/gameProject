@@ -1,11 +1,1199 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dungeon Quest</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #09090d;
+    color: white;
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px 0;
+}
+
+#game {
+    width: 1000px;
+    max-width: 98vw;
+    padding: 15px;
+    background: #18181d;
+    border: 2px solid #555;
+    border-radius: 14px;
+}
+
+h1 {
+    text-align: center;
+    color: #f5c542;
+    margin: 5px 0 12px;
+}
+
+#stats {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    background: #292930;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+#mapWrapper {
+    width: 100%;
+    overflow: auto;
+    background: #050505;
+    border-radius: 8px;
+    padding: 5px;
+}
+
+#map {
+    display: grid;
+    grid-template-columns: repeat(24, 32px);
+    gap: 2px;
+    width: max-content;
+}
+
+.tile {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    user-select: none;
+}
+
+.wall {
+    background: #303036;
+}
+
+.floor {
+    background: #151519;
+}
+
+.player {
+    background: #244f76;
+}
+
+.enemy {
+    background: #682828;
+}
+
+.treasure {
+    background: #5d4c18;
+}
+
+.exit {
+    background: #25542f;
+}
+
+#message {
+    min-height: 35px;
+    text-align: center;
+    padding: 8px;
+    color: #ddd;
+}
+
+#timer {
+    text-align: center;
+    color: #999;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+
+#controls {
+    display: grid;
+    grid-template-columns: repeat(3, 65px);
+    justify-content: center;
+    gap: 6px;
+}
+
+button {
+    height: 55px;
+    border: 0;
+    border-radius: 8px;
+    background: #444;
+    color: white;
+    font-size: 21px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #666;
+}
+
+.empty {
+    visibility: hidden;
+}
+
+#restart {
+    display: block;
+    margin: 12px auto 0;
+    height: auto;
+    padding: 10px 25px;
+    background: #8b6420;
+    font-size: 16px;
+}
+
+@media (max-width: 600px) {
+    #game {
+        padding: 8px;
+    }
+
+    #map {
+        grid-template-columns: repeat(24, 27px);
+    }
+
+    .tile {
+        width: 27px;
+        height: 27px;
+        font-size: 18px;
+    }
+}
+</style>
 </head>
+
 <body>
-    
+
+<div id="game">
+
+    <h1>⚔️ Dungeon Quest</h1>
+
+    <div id="stats">
+        <span>❤️ HP: <span id="hp">100</span></span>
+        <span>💰 Gold: <span id="gold">0</span></span>
+        <span>👹 Enemies: <span id="enemies">0</span></span>
+        <span>🏆 Level: <span id="level">1</span></span>
+    </div>
+
+    <div id="mapWrapper">
+        <div id="map"></div>
+    </div>
+
+    <div id="message">
+        Найди сокровище и сбеги из подземелья!
+    </div>
+
+    <div id="timer">
+        👹 Враги двигаются каждую секунду
+        •
+        👹 Новый враг появляется каждые 5 секунд
+    </div>
+
+    <div id="controls">
+        <button class="empty"></button>
+        <button data-dir="up">⬆️</button>
+        <button class="empty"></button>
+
+        <button data-dir="left">⬅️</button>
+        <button data-dir="down">⬇️</button>
+        <button data-dir="right">➡️</button>
+    </div>
+
+    <button id="restart">🔄 Начать заново</button>
+
+</div>
+
+<script>
+
+/* =====================================================
+   НАСТРОЙКИ КАРТЫ
+===================================================== */
+
+const WIDTH = 24;
+const HEIGHT = 18;
+
+
+/*
+    # = стена
+    . = пол
+*/
+
+const layout = [
+    "########################",
+    "#......................#",
+    "#.######.#####.#######.#",
+    "#.#....#.....#.#.......#",
+    "#.#.##.#####.#.#.#####.#",
+    "#...#.........#.....#...#",
+    "###.#.###########.#.###.#",
+    "#...#.......#.....#.....#",
+    "#.#######.#.#.#########.#",
+    "#.........#.#...........#",
+    "#.#########.#.#########.#",
+    "#.........#.#.......#...#",
+    "#########.#.#######.#.#.#",
+    "#.........#.........#...#",
+    "#.###################.#.#",
+    "#......................#",
+    "#......................#",
+    "########################"
+];
+
+
+/* =====================================================
+   ЭЛЕМЕНТЫ
+===================================================== */
+
+const mapElement =
+    document.getElementById("map");
+
+const hpElement =
+    document.getElementById("hp");
+
+const goldElement =
+    document.getElementById("gold");
+
+const enemiesElement =
+    document.getElementById("enemies");
+
+const levelElement =
+    document.getElementById("level");
+
+const messageElement =
+    document.getElementById("message");
+
+
+/* =====================================================
+   ПЕРЕМЕННЫЕ ИГРЫ
+===================================================== */
+
+let player;
+let enemies;
+
+let treasure;
+let exit;
+
+let hp;
+let gold;
+let level;
+
+let gameOver = false;
+
+let enemyMoveTimer;
+let enemySpawnTimer;
+
+
+/* =====================================================
+   НАЧАЛО / ПЕРЕЗАПУСК
+===================================================== */
+
+function resetGame() {
+
+    clearInterval(enemyMoveTimer);
+    clearInterval(enemySpawnTimer);
+
+    hp = 100;
+    gold = 0;
+    level = 1;
+    gameOver = false;
+
+    player = {
+        x: 1,
+        y: 1
+    };
+
+    treasure = {
+        x: 21,
+        y: 16,
+        collected: false
+    };
+
+    exit = {
+        x: 22,
+        y: 1
+    };
+
+    enemies = [];
+
+    /*
+        Создаём 5 врагов
+        в случайных местах.
+    */
+
+    for (let i = 0; i < 5; i++) {
+        spawnEnemy();
+    }
+
+    render();
+
+    setMessage(
+        "🗺️ Исследуй подземелье и найди сокровище!"
+    );
+
+
+    /*
+        ВРАГИ ДВИГАЮТСЯ КАЖДУЮ СЕКУНДУ
+    */
+
+    enemyMoveTimer = setInterval(() => {
+
+        if (!gameOver) {
+            moveAllEnemies();
+            render();
+        }
+
+    }, 1000);
+
+
+    /*
+        НОВЫЙ ВРАГ КАЖДЫЕ 5 СЕКУНД
+    */
+
+    enemySpawnTimer = setInterval(() => {
+
+        if (
+            !gameOver &&
+            enemies.length < 20
+        ) {
+
+            spawnEnemy();
+
+            setMessage(
+                "👹 Где-то появился новый враг!"
+            );
+
+            render();
+        }
+
+    }, 5000);
+}
+
+
+/* =====================================================
+   ПРОВЕРКА СТЕН
+===================================================== */
+
+function isWall(x, y) {
+
+    if (
+        x < 0 ||
+        y < 0 ||
+        x >= WIDTH ||
+        y >= HEIGHT
+    ) {
+        return true;
+    }
+
+    return layout[y][x] === "#";
+}
+
+
+/* =====================================================
+   ПОИСК ВРАГА
+===================================================== */
+
+function enemyAt(x, y) {
+
+    return enemies.find(
+        enemy =>
+            enemy.x === x &&
+            enemy.y === y
+    );
+}
+
+
+/* =====================================================
+   СЛУЧАЙНАЯ ТОЧКА ДЛЯ ВРАГА
+===================================================== */
+
+function getRandomFloorPosition() {
+
+    const positions = [];
+
+    for (
+        let y = 1;
+        y < HEIGHT - 1;
+        y++
+    ) {
+
+        for (
+            let x = 1;
+            x < WIDTH - 1;
+            x++
+        ) {
+
+            if (isWall(x, y)) {
+                continue;
+            }
+
+            /*
+                Не появляться на игроке.
+            */
+
+            if (
+                player &&
+                player.x === x &&
+                player.y === y
+            ) {
+                continue;
+            }
+
+            /*
+                Не появляться на сокровище.
+            */
+
+            if (
+                treasure &&
+                treasure.x === x &&
+                treasure.y === y
+            ) {
+                continue;
+            }
+
+            /*
+                Не появляться на выходе.
+            */
+
+            if (
+                exit &&
+                exit.x === x &&
+                exit.y === y
+            ) {
+                continue;
+            }
+
+            /*
+                Не появляться на другом враге.
+            */
+
+            if (enemyAt(x, y)) {
+                continue;
+            }
+
+            /*
+                Не появляться слишком близко
+                к игроку.
+            */
+
+            if (player) {
+
+                const distance =
+                    Math.abs(player.x - x) +
+                    Math.abs(player.y - y);
+
+                if (distance < 5) {
+                    continue;
+                }
+            }
+
+            positions.push({
+                x: x,
+                y: y
+            });
+        }
+    }
+
+    if (positions.length === 0) {
+        return null;
+    }
+
+    return positions[
+        Math.floor(
+            Math.random() * positions.length
+        )
+    ];
+}
+
+
+/* =====================================================
+   СОЗДАТЬ ВРАГА
+===================================================== */
+
+function spawnEnemy() {
+
+    const position =
+        getRandomFloorPosition();
+
+    if (!position) {
+        return;
+    }
+
+    enemies.push({
+        x: position.x,
+        y: position.y,
+        hp: 30
+    });
+}
+
+
+/* =====================================================
+   ОТРИСОВКА
+===================================================== */
+
+function render() {
+
+    mapElement.innerHTML = "";
+
+    for (
+        let y = 0;
+        y < HEIGHT;
+        y++
+    ) {
+
+        for (
+            let x = 0;
+            x < WIDTH;
+            x++
+        ) {
+
+            const tile =
+                document.createElement("div");
+
+            tile.className = "tile";
+
+
+            /*
+                СТЕНА
+            */
+
+            if (isWall(x, y)) {
+
+                tile.classList.add("wall");
+
+                tile.textContent = "🧱";
+            }
+
+
+            /*
+                ПОЛ
+            */
+
+            else {
+
+                tile.classList.add("floor");
+
+
+                /*
+                    ИГРОК
+                */
+
+                if (
+                    player.x === x &&
+                    player.y === y
+                ) {
+
+                    tile.classList.add("player");
+
+                    tile.textContent = "🧙";
+                }
+
+
+                /*
+                    ВРАГ
+                */
+
+                else if (enemyAt(x, y)) {
+
+                    tile.classList.add("enemy");
+
+                    tile.textContent = "👹";
+                }
+
+
+                /*
+                    СОКРОВИЩЕ
+                */
+
+                else if (
+                    treasure.x === x &&
+                    treasure.y === y &&
+                    !treasure.collected
+                ) {
+
+                    tile.classList.add("treasure");
+
+                    tile.textContent = "💰";
+                }
+
+
+                /*
+                    ВЫХОД
+                */
+
+                else if (
+                    exit.x === x &&
+                    exit.y === y
+                ) {
+
+                    tile.classList.add("exit");
+
+                    tile.textContent = "🌀";
+                }
+            }
+
+            mapElement.appendChild(tile);
+        }
+    }
+
+    hpElement.textContent =
+        Math.max(0, hp);
+
+    goldElement.textContent =
+        gold;
+
+    enemiesElement.textContent =
+        enemies.length;
+
+    levelElement.textContent =
+        level;
+}
+
+
+/* =====================================================
+   ДВИЖЕНИЕ ИГРОКА
+===================================================== */
+
+function movePlayer(dx, dy) {
+
+    if (gameOver) {
+        return;
+    }
+
+    const newX =
+        player.x + dx;
+
+    const newY =
+        player.y + dy;
+
+
+    /*
+        Стена
+    */
+
+    if (isWall(newX, newY)) {
+
+        setMessage(
+            "🧱 Здесь стена!"
+        );
+
+        return;
+    }
+
+
+    /*
+        Враг
+    */
+
+    const enemy =
+        enemyAt(newX, newY);
+
+    if (enemy) {
+
+        attackEnemy(enemy);
+
+        return;
+    }
+
+
+    /*
+        Двигаем игрока
+    */
+
+    player.x = newX;
+    player.y = newY;
+
+    checkTile();
+
+    render();
+}
+
+
+/* =====================================================
+   АТАКА
+===================================================== */
+
+function attackEnemy(enemy) {
+
+    const damage =
+        Math.floor(
+            Math.random() * 16
+        ) + 10;
+
+    enemy.hp -= damage;
+
+
+    if (enemy.hp <= 0) {
+
+        enemies =
+            enemies.filter(
+                e => e !== enemy
+            );
+
+        gold += 10;
+
+        setMessage(
+            "⚔️ Враг побеждён! +10 золота"
+        );
+
+    } else {
+
+        const damageTaken =
+            Math.floor(
+                Math.random() * 8
+            ) + 4;
+
+        hp -= damageTaken;
+
+        setMessage(
+            `⚔️ Ты нанёс ${damage} урона. ` +
+            `Враг нанёс ${damageTaken}!`
+        );
+
+        if (hp <= 0) {
+            loseGame();
+        }
+    }
+
+    render();
+}
+
+
+/* =====================================================
+   СОКРОВИЩЕ И ВЫХОД
+===================================================== */
+
+function checkTile() {
+
+    /*
+        Подобрал сокровище
+    */
+
+    if (
+        player.x === treasure.x &&
+        player.y === treasure.y &&
+        !treasure.collected
+    ) {
+
+        treasure.collected = true;
+
+        gold += 100;
+
+        setMessage(
+            "💰 ТЫ НАШЁЛ ЛЕГЕНДАРНОЕ СОКРОВИЩЕ! +100 ЗОЛОТА!"
+        );
+    }
+
+
+    /*
+        Выход
+    */
+
+    if (
+        player.x === exit.x &&
+        player.y === exit.y
+    ) {
+
+        if (treasure.collected) {
+
+            winGame();
+
+        } else {
+
+            setMessage(
+                "🌀 Выход заперт! Сначала найди сокровище."
+            );
+        }
+    }
+}
+
+
+/* =====================================================
+   ИИ ВРАГОВ
+===================================================== */
+
+/*
+    Эта функция запускается
+    РОВНО РАЗ В СЕКУНДУ.
+*/
+
+function moveAllEnemies() {
+
+    if (gameOver) {
+        return;
+    }
+
+    const currentEnemies =
+        [...enemies];
+
+
+    currentEnemies.forEach(enemy => {
+
+        /*
+            Расстояние до игрока
+        */
+
+        const distance =
+            Math.abs(
+                player.x - enemy.x
+            ) +
+            Math.abs(
+                player.y - enemy.y
+            );
+
+
+        /*
+            Если рядом — атакуем.
+        */
+
+        if (distance === 1) {
+
+            const damage =
+                Math.floor(
+                    Math.random() * 8
+                ) + 5;
+
+            hp -= damage;
+
+            setMessage(
+                `👹 Враг атакует! -${damage} HP`
+            );
+
+            if (hp <= 0) {
+                loseGame();
+            }
+
+            return;
+        }
+
+
+        /*
+            Возможные направления
+        */
+
+        let moves = [];
+
+
+        /*
+            Сначала пытаемся идти
+            к игроку по X.
+        */
+
+        if (
+            player.x >
+            enemy.x
+        ) {
+
+            moves.push({
+                x: 1,
+                y: 0
+            });
+        }
+
+
+        if (
+            player.x <
+            enemy.x
+        ) {
+
+            moves.push({
+                x: -1,
+                y: 0
+            });
+        }
+
+
+        /*
+            Затем по Y.
+        */
+
+        if (
+            player.y >
+            enemy.y
+        ) {
+
+            moves.push({
+                x: 0,
+                y: 1
+            });
+        }
+
+
+        if (
+            player.y <
+            enemy.y
+        ) {
+
+            moves.push({
+                x: 0,
+                y: -1
+            });
+        }
+
+
+        /*
+            Добавляем случайные движения.
+        */
+
+        moves.push(
+            {
+                x: 1,
+                y: 0
+            },
+            {
+                x: -1,
+                y: 0
+            },
+            {
+                x: 0,
+                y: 1
+            },
+            {
+                x: 0,
+                y: -1
+            }
+        );
+
+
+        /*
+            Перемешиваем.
+        */
+
+        moves.sort(
+            () =>
+                Math.random() - 0.5
+        );
+
+
+        /*
+            Выбираем первое допустимое
+            направление.
+        */
+
+        for (
+            const move of moves
+        ) {
+
+            const nx =
+                enemy.x + move.x;
+
+            const ny =
+                enemy.y + move.y;
+
+
+            /*
+                Не через стену.
+            */
+
+            if (
+                isWall(nx, ny)
+            ) {
+                continue;
+            }
+
+
+            /*
+                Не на игрока.
+            */
+
+            if (
+                player.x === nx &&
+                player.y === ny
+            ) {
+                continue;
+            }
+
+
+            /*
+                Не на другого врага.
+            */
+
+            if (
+                enemyAt(nx, ny)
+            ) {
+                continue;
+            }
+
+
+            /*
+                Перемещаем.
+            */
+
+            enemy.x = nx;
+            enemy.y = ny;
+
+            break;
+        }
+
+    });
+}
+
+
+/* =====================================================
+   ПОБЕДА
+===================================================== */
+
+function winGame() {
+
+    gameOver = true;
+
+    clearInterval(
+        enemyMoveTimer
+    );
+
+    clearInterval(
+        enemySpawnTimer
+    );
+
+    setMessage(
+        `🏆 ПОБЕДА! Ты сбежал из подземелья! ` +
+        `Золото: ${gold}`
+    );
+}
+
+
+/* =====================================================
+   ПРОИГРЫШ
+===================================================== */
+
+function loseGame() {
+
+    gameOver = true;
+
+    hp = 0;
+
+    clearInterval(
+        enemyMoveTimer
+    );
+
+    clearInterval(
+        enemySpawnTimer
+    );
+
+    setMessage(
+        "💀 ТЫ ПОГИБ! Нажми «Начать заново»."
+    );
+
+    render();
+}
+
+
+/* =====================================================
+   СООБЩЕНИЯ
+===================================================== */
+
+function setMessage(text) {
+
+    messageElement.textContent =
+        text;
+}
+
+
+/* =====================================================
+   КЛАВИАТУРА
+===================================================== */
+
+document.addEventListener(
+    "keydown",
+    event => {
+
+        const controls = {
+
+            ArrowUp: [0, -1],
+            w: [0, -1],
+
+            ArrowDown: [0, 1],
+            s: [0, 1],
+
+            ArrowLeft: [-1, 0],
+            a: [-1, 0],
+
+            ArrowRight: [1, 0],
+            d: [1, 0]
+        };
+
+
+        if (
+            controls[event.key]
+        ) {
+
+            event.preventDefault();
+
+            const [
+                dx,
+                dy
+            ] =
+                controls[event.key];
+
+            movePlayer(
+                dx,
+                dy
+            );
+        }
+    }
+);
+
+
+/* =====================================================
+   КНОПКИ НА ТЕЛЕФОНЕ
+===================================================== */
+
+document
+.querySelectorAll("[data-dir]")
+.forEach(button => {
+
+    button.addEventListener(
+        "click",
+        () => {
+
+            const direction =
+                button.dataset.dir;
+
+
+            const directions = {
+
+                up: [0, -1],
+                down: [0, 1],
+                left: [-1, 0],
+                right: [1, 0]
+            };
+
+
+            const [
+                dx,
+                dy
+            ] =
+                directions[direction];
+
+
+            movePlayer(
+                dx,
+                dy
+            );
+        }
+    );
+});
+
+
+/* =====================================================
+   RESTART
+===================================================== */
+
+document
+.getElementById("restart")
+.addEventListener(
+    "click",
+    resetGame
+);
+
+
+/* =====================================================
+   ЗАПУСК
+===================================================== */
+
+resetGame();
+
+</script>
+
 </body>
 </html>
