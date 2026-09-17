@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dungeon Quest - Huge Map</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #09090d;
+    color: white;
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+#game {
+    width: 1000px;
+    max-width: 98vw;
+    padding: 15px;
+    background: #18181d;
+    border: 2px solid #555;
+    border-radius: 14px;
+}
+
+h1 {
+    text-align: center;
+    color: #f5c542;
+    margin: 5px 0 12px;
+}
+
+#stats {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    background: #292930;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+#mapWrapper {
+    width: 100%;
+    overflow: auto;
+    background: #050505;
+    border-radius: 8px;
+    padding: 5px;
+}
+
+#map {
+    display: grid;
+
+    /*
+       BIG MAP:
+       24 columns
+       18 rows
+    */
+    grid-template-columns: repeat(24, 32px);
+
+    gap: 2px;
+    width: max-content;
+}
+
+.tile {
+    width: 32px;
+    height: 32px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 22px;
+
+    user-select: none;
+}
+
+.wall {
+    background: #303036;
+}
+
+.floor {
+    background: #151519;
+}
+
+.player {
+    background: #244f76;
+}
+
+.enemy {
+    background: #682828;
+}
+
+.treasure {
+    background: #5d4c18;
+}
+
+.exit {
+    background: #25542f;
+}
+
+#message {
+    min-height: 35px;
+    text-align: center;
+    padding: 8px;
+    color: #ddd;
+}
+
+#timer {
+    text-align: center;
+    color: #999;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+
+#controls {
+    display: grid;
+    grid-template-columns: repeat(3, 65px);
+    justify-content: center;
+    gap: 6px;
+}
+
+button {
+    height: 55px;
+    border: 0;
+    border-radius: 8px;
+    background: #444;
+    color: white;
+    font-size: 21px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #666;
+}
+
+.empty {
+    visibility: hidden;
+}
+
+#restart {
+    display: block;
+    margin: 12px auto 0;
+    height: auto;
+    padding: 10px 25px;
+    background: #8b6420;
+    font-size: 16px;
+}
+
+@media (max-width: 600px) {
+    #game {
+        padding: 8px;
+    }
+
+    #map {
+        grid-template-columns: repeat(24, 27px);
+    }
+
+    .tile {
+        width: 27px;
+        height: 27px;
+        font-size: 18px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div id="game">
+
+    <h1>⚔️ Dungeon Quest</h1>
+
+    <div id="stats">
+        <span>❤️ HP: <span id="hp">100</span></span>
+        <span>💰 Gold: <span id="gold">0</span></span>
+        <span>👹 Enemies: <span id="enemies">0</span></span>
+        <span>🏆 Level: <span id="level">1</span></span>
+    </div>
+
+    <div id="mapWrapper">
+        <div id="map"></div>
+    </div>
+
+    <div id="message">
+        Find the treasure and escape!
+    </div>
+
+    <div id="timer">
+        👹 Enemies move every second • New enemies spawn every 5 seconds
+    </div>
+
+    <div id="controls">
+        <button class="empty"></button>
+        <button data-dir="up">⬆️</button>
+        <button class="empty"></button>
+
+        <button data-dir="left">⬅️</button>
+        <button data-dir="down">⬇️</button>
+        <button data-dir="right">➡️</button>
+    </div>
+
+    <button id="restart">🔄 Restart Dungeon</button>
+
+</div>
+
+<script>
+
+/* =====================================================
+   BIGGER DUNGEON
+   24 COLUMNS × 18 ROWS
+===================================================== */
+
+const WIDTH = 24;
+const HEIGHT = 18;
+
+
+/*
+   # = wall
+   . = floor
+
+   The map is much larger than before.
+*/
+
+const layout = [
+    "########################",
+    "#......................#",
+    "#.######.#####.#######.#",
+    "#.#....#.....#.#.......#",
+    "#.#.##.#####.#.#.#####.#",
+    "#...#.........#.....#...#",
+    "###.#.###########.#.###.#",
+    "#...#.......#.....#.....#",
+    "#.#######.#.#.#########.#",
+    "#.........#.#...........#",
+    "#.#########.#.#########.#",
+    "#.........#.#.......#...#",
+    "#########.#.#######.#.#.#",
+    "#.........#.........#...#",
+    "#.###################.#.#",
+    "#......................#",
+    "#......................#",
+    "########################"
+];
+
+
+/* =====================================================
+   ELEMENTS
+===================================================== */
+
+const mapElement =
+    document.getElementById("map");
+
+const hpElement =
+    document.getElementById("hp");
+
+const goldElement =
+    document.getElementById("gold");
+
+const enemiesElement =
+    document.getElementById("enemies");
+
+const levelElement =
+    document.getElementById("level");
+
+const messageElement =
+    document.getElementById("message");
+
+
+/* =====================================================
+   GAME VARIABLES
+===================================================== */
+
+let player;
+let enemies;
+
+let treasure;
+let exit;
+
+let hp;
+let gold;
+let level;
+
+let gameOver = false;
+
+let enemyMoveTimer;
+let enemySpawnTimer;
+
+
+/* =====================================================
+   RESET
+===================================================== */
+
+function resetGame() {
+
+    clearInterval(enemyMoveTimer);
+    clearInterval(enemySpawnTimer);
+
+    hp = 100;
+    gold = 0;
+    level = 1;
+
+    gameOver = false;
+
+    /*
+       Player starts in top-left area.
+    */
+
+    player = {
+        x: 1,
+        y: 1
+    };
+
+
+    /*
+       Treasure is far away.
+    */
+
+    treasure = {
+        x: 21,
+        y: 16,
+        collected: false
+    };
+
+
+    /*
+       Exit is near the top-right.
+    */
+
+    exit = {
+        x: 22,
+        y: 1
+    };
+
+
+    /*
+       Start with 5 randomly positioned enemies.
+    */
+
+    enemies = [];
+
+    for (let i = 0; i < 5; i++) {
+        spawnEnemy();
+    }
+
+
+    render();
+
+    setMessage(
+        "🗺️ Explore the huge dungeon and find the treasure!"
+    );
+
+
+    /*
+       ENEMIES MOVE EVERY SECOND
+    */
+
+    enemyMoveTimer = setInterval(() => {
+
+        if (!gameOver) {
+
+            moveAllEnemies();
+
+            render();
+        }
+
+    }, 1000);
+
+
+    /*
+       NEW ENEMY EVERY 5 SECONDS
+    */
+
+    enemySpawnTimer = setInterval(() => {
+
+        if (
+            !gameOver &&
+            enemies.length < 20
+        ) {
+
+            spawnEnemy();
+
+            setMessage(
+                "👹 A new enemy appeared somewhere in the dungeon!"
+            );
+
+            render();
+        }
+
+    }, 5000);
+}
+
+
+/* =====================================================
+   MAP
+===================================================== */
+
+function isWall(x, y) {
+
+    if (
+        x < 0 ||
+        y < 0 ||
+        x >= WIDTH ||
+        y >= HEIGHT
+    ) {
+        return true;
+    }
+
+    return layout[y][x] === "#";
+}
+
+
+function enemyAt(x, y) {
+
+    return enemies.find(
+        enemy =>
+            enemy.x === x &&
+            enemy.y === y
+    );
+}
+
+
+/* =====================================================
+   RANDOM SPAWN
+===================================================== */
+
+function getRandomFloorPosition() {
+
+    const positions = [];
+
+    for (
+        let y = 1;
+        y < HEIGHT - 1;
+        y++
+    ) {
+
+        for (
+            let x = 1;
+            x < WIDTH - 1;
+            x++
+        ) {
+
+            /*
+               Must be floor.
+            */
+
+            if (isWall(x, y)) {
+                continue;
+            }
+
+
+            /*
+               Don't spawn on player.
+            */
+
+            if (
+                player &&
+                player.x === x &&
+                player.y === y
+            ) {
+                continue;
+            }
+
+
+            /*
+               Don't spawn on treasure.
+            */
+
+            if (
+                treasure &&
+                treasure.x === x &&
+                treasure.y === y
+            ) {
+                continue;
+            }
+
+
+            /*
+               Don't spawn on exit.
+            */
+
+            if (
+                exit &&
+                exit.x === x &&
+                exit.y === y
+            ) {
+                continue;
+            }
+
+
+            /*
+               Don't stack enemies.
+            */
+
+            if (enemyAt(x, y)) {
+                continue;
+            }
+
+
+            /*
+               Don't spawn too close
+               to the player.
+            */
+
+            if (player) {
+
+                const distance =
+                    Math.abs(player.x - x) +
+                    Math.abs(player.y - y);
+
+                if (distance < 5) {
+                    continue;
+                }
+            }
+
+
+            positions.push({
+                x: x,
+                y: y
+            });
+        }
+    }
+
+
+    if (positions.length === 0) {
+        return null;
+    }
+
+
+    return positions[
+        Math.floor(
+            Math.random() * positions.length
+        )
+    ];
+}
+
+
+function spawnEnemy() {
+
+    const position =
+        getRandomFloorPosition();
+
+    if (!position) {
+        return;
+    }
+
+    enemies.push({
+
+        x: position.x,
+        y: position.y,
+
+        hp: 30
+
+    });
+}
+
+
+/* =====================================================
+   RENDER MAP
+===================================================== */
+
+function render() {
+
+    mapElement.innerHTML = "";
+
+
+    for (
+        let y = 0;
+        y < HEIGHT;
+        y++
+    ) {
+
+        for (
+            let x = 0;
+            x < WIDTH;
+            x++
+        ) {
+
+            const tile =
+                document.createElement("div");
+
+            tile.className = "tile";
+
+
+            /*
+               WALL
+            */
+
+            if (isWall(x, y)) {
+
+                tile.classList.add("wall");
+
+                tile.textContent = "🧱";
+            }
+
+
+            /*
+               FLOOR
+            */
+
+            else {
+
+                tile.classList.add("floor");
+
+
+                /*
+                   PLAYER
+                */
+
+                if (
+                    player.x === x &&
+                    player.y === y
+                ) {
+
+                    tile.classList.add("player");
+
+                    tile.textContent = "🧙";
+                }
+
+
+                /*
+                   ENEMY
+                */
+
+                else if (enemyAt(x, y)) {
+
+                    tile.classList.add("enemy");
+
+                    tile.textContent = "👹";
+                }
+
+
+                /*
+                   TREASURE
+                */
+
+                else if (
+                    treasure.x === x &&
+                    treasure.y === y &&
+                    !treasure.collected
+                ) {
+
+                    tile.classList.add("treasure");
+
+                    tile.textContent = "💰";
+                }
+
+
+                /*
+                   EXIT
+                */
+
+                else if (
+                    exit.x === x &&
+                    exit.y === y
+                ) {
+
+                    tile.classList.add("exit");
+
+                    tile.textContent = "🌀";
+                }
+            }
+
+
+            mapElement.appendChild(tile);
+        }
+    }
+
+
+    hpElement.textContent =
+        Math.max(0, hp);
+
+    goldElement.textContent =
+        gold;
+
+    enemiesElement.textContent =
+        enemies.length;
+
+    levelElement.textContent =
+        level;
+}
+
+
+/* =====================================================
+   PLAYER MOVEMENT
+===================================================== */
+
+function movePlayer(dx, dy) {
+
+    if (gameOver) {
+        return;
+    }
+
+
+    const newX =
+        player.x + dx;
+
+    const newY =
+        player.y + dy;
+
+
+    /*
+       Wall collision
+    */
+
+    if (
+        isWall(newX, newY)
+    ) {
+
+        setMessage(
+            "🧱 A wall blocks your path!"
+        );
+
+        return;
+    }
+
+
+    /*
+       Enemy collision
+    */
+
+    const enemy =
+        enemyAt(newX, newY);
+
+
+    if (enemy) {
+
+        attackEnemy(enemy);
+
+        return;
+    }
+
+
+    /*
+       Move
+    */
+
+    player.x = newX;
+    player.y = newY;
+
+
+    checkTile();
+
+    render();
+}
+
+
+/* =====================================================
+   COMBAT
+===================================================== */
+
+function attackEnemy(enemy) {
+
+    const damage =
+        Math.floor(
+            Math.random() * 16
+        ) + 10;
+
+
+    enemy.hp -= damage;
+
+
+    if (enemy.hp <= 0) {
+
+        enemies =
+            enemies.filter(
+                e => e !== enemy
+            );
+
+        gold += 10;
+
+        setMessage(
+            "⚔️ Monster defeated! +10 gold."
+        );
+
+    } else {
+
+        const damageTaken =
+            Math.floor(
+                Math.random() * 8
+            ) + 4;
+
+
+        hp -= damageTaken;
+
+
+        setMessage(
+            `⚔️ You hit for ${damage}. ` +
+            `Enemy hits you for ${damageTaken}.`
+        );
+
+
+        if (hp <= 0) {
+
+            loseGame();
+        }
+    }
+
+
+    render();
+}
+
+
+/* =====================================================
+   TREASURE / EXIT
+===================================================== */
+
+function checkTile() {
+
+    /*
+       Treasure
+    */
+
+    if (
+        player.x === treasure.x &&
+        player.y === treasure.y &&
+        !treasure.collected
+    ) {
+
+        treasure.collected = true;
+
+        gold += 100;
+
+        setMessage(
+            "💰 LEGENDARY TREASURE FOUND! +100 GOLD!"
+        );
+    }
+
+
+    /*
+       Exit
+    */
+
+    if (
+        player.x === exit.x &&
+        player.y === exit.y
+    ) {
+
+        if (
+            treasure.collected
+        ) {
+
+            winGame();
+
+        } else {
+
+            setMessage(
+                "🌀 The portal is locked. Find the treasure first!"
+            );
+        }
+    }
+}
+
+
+/* =====================================================
+   ENEMY AI
+===================================================== */
+
+/*
+   EVERY ENEMY MOVES ONCE PER SECOND.
+*/
+
+function moveAllEnemies() {
+
+    if (gameOver) {
+        return;
+    }
+
+
+    /*
+       Copy array so it is safe
+       if something changes.
+    */
+
+    const currentEnemies =
+        [...enemies];
+
+
+    currentEnemies.forEach(
+        enemy => {
+
+            /*
+               Distance to player.
+            */
+
+            const distance =
+                Math.abs(
+                    player.x - enemy.x
+                ) +
+                Math.abs(
+                    player.y - enemy.y
+                );
+
+
+            /*
+               Attack if next to player.
+            */
+
+            if (distance === 1) {
+
+                const damage =
+                    Math.floor(
+                        Math.random() * 8
+                    ) + 5;
+
+
+                hp -= damage;
+
+
+                setMessage(
+                    `👹 Enemy attacks you for ${damage} damage!`
+                );
+
+
+                if (hp <= 0) {
+                    loseGame();
+                }
+
+                return;
+            }
+
+
+            /*
+               Possible movement directions.
+            */
+
+            let moves = [];
+
+
+            /*
+               Prefer horizontal movement
+               toward player.
+            */
+
+            if (
+                player.x >
+                enemy.x
+            ) {
+
+                moves.push({
+                    x: 1,
+                    y: 0
+                });
+            }
+
+
+            if (
+                player.x <
+                enemy.x
+            ) {
+
+                moves.push({
+                    x: -1,
+                    y: 0
+                });
+            }
+
+
+            /*
+               Prefer vertical movement
+               toward player.
+            */
+
+            if (
+                player.y >
+                enemy.y
+            ) {
+
+                moves.push({
+                    x: 0,
+                    y: 1
+                });
+            }
+
+
+            if (
+                player.y <
+                enemy.y
+            ) {
+
+                moves.push({
+                    x: 0,
+                    y: -1
+                });
+            }
+
+
+            /*
+               Add random movement options.
+            */
+
+            moves.push(
+                {
+                    x: 1,
+                    y: 0
+                },
+                {
+                    x: -1,
+                    y: 0
+                },
+                {
+                    x: 0,
+                    y: 1
+                },
+                {
+                    x: 0,
+                    y: -1
+                }
+            );
+
+
+            /*
+               Randomize choices.
+            */
+
+            moves.sort(
+                () =>
+                    Math.random() - 0.5
+            );
+
+
+            /*
+               Try each movement.
+            */
+
+            for (
+                const move of moves
+            ) {
+
+                const nx =
+                    enemy.x + move.x;
+
+                const ny =
+                    enemy.y + move.y;
+
+
+                /*
+                   Can't walk through walls.
+                */
+
+                if (
+                    isWall(nx, ny)
+                ) {
+                    continue;
+                }
+
+
+                /*
+                   Can't walk onto player.
+                */
+
+                if (
+                    player.x === nx &&
+                    player.y === ny
+                ) {
+                    continue;
+                }
+
+
+                /*
+                   Can't stack enemies.
+                */
+
+                if (
+                    enemyAt(nx, ny)
+                ) {
+                    continue;
+                }
+
+
+                /*
+                   Move enemy.
+                */
+
+                enemy.x = nx;
+                enemy.y = ny;
+
+                break;
+            }
+        }
+    );
+}
+
+
+/* =====================================================
+   GAME OVER
+===================================================== */
+
+function winGame() {
+
+    gameOver = true;
+
+    clearInterval(
+        enemyMoveTimer
+    );
+
+    clearInterval(
+        enemySpawnTimer
+    );
+
+
+    setMessage(
+        `🏆 YOU ESCAPED THE DUNGEON! ` +
+        `You collected ${gold} gold!`
+    );
+}
+
+
+function loseGame() {
+
+    gameOver = true;
+
+    hp = 0;
+
+    clearInterval(
+        enemyMoveTimer
+    );
+
+    clearInterval(
+        enemySpawnTimer
+    );
+
+
+    setMessage(
+        "💀 YOU DIED! Press Restart to try again."
+    );
+
+
+    render();
+}
+
+
+/* =====================================================
+   MESSAGE
+===================================================== */
+
+function setMessage(text) {
+
+    messageElement.textContent =
+        text;
+}
+
+
+/* =====================================================
+   KEYBOARD
+===================================================== */
+
+document.addEventListener(
+    "keydown",
+    event => {
+
+        const controls = {
+
+            ArrowUp: [0, -1],
+            w: [0, -1],
+
+            ArrowDown: [0, 1],
+            s: [0, 1],
+
+            ArrowLeft: [-1, 0],
+            a: [-1, 0],
+
+            ArrowRight: [1, 0],
+            d: [1, 0]
+        };
+
+
+        if (
+            controls[event.key]
+        ) {
+
+            event.preventDefault();
+
+
+            const [
+                dx,
+                dy
+            ] = controls[event.key];
+
+
+            movePlayer(
+                dx,
+                dy
+            );
+        }
+    }
+);
+
+
+/* =====================================================
+   MOBILE CONTROLS
+===================================================== */
+
+document
+.querySelectorAll("[data-dir]")
+.forEach(button => {
+
+    button.addEventListener(
+        "click",
+        () => {
+
+            const direction =
+                button.dataset.dir;
+
+
+            const directions = {
+
+                up: [0, -1],
+                down: [0, 1],
+                left: [-1, 0],
+                right: [1, 0]
+            };
+
+
+            const [
+                dx,
+                dy
+            ] =
+                directions[direction];
+
+
+            movePlayer(
+                dx,
+                dy
+            );
+        }
+    );
+});
+
+
+/* =====================================================
+   RESTART
+===================================================== */
+
+document
+.getElementById("restart")
+.addEventListener(
+    "click",
+    resetGame
+);
+
+
+/* =====================================================
+   START
+===================================================== */
+
+resetGame();
+
+</script>
+
+</body>
+</html>
